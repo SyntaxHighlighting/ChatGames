@@ -9,53 +9,61 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 public final class ChatGames extends JavaPlugin {
 
-    private static final Random random = new Random();
+    private static final Random RANDOM = new Random();
     private static Plugin instance;
-    private final ArrayList<Types> enabledGames = new ArrayList<>();
+    private final List<Types> enabledGames = new ArrayList<>();
 
     public static Plugin getInstance() {
         return instance;
     }
 
     public static Random getRandom() {
-        return random;
+        return RANDOM;
     }
 
     @Override
     public void onEnable() {
         instance = this;
-
-
         saveDefaultConfig();
+        initializeEnabledGames();
 
-        if(getConfig().getBoolean("games.typing.enabled")) {
-            enabledGames.add(Types.TYPING);
+        int interval = Util.convertToSeconds(getConfig().getInt("games.settings.time"));
+        if (interval > 0 && !enabledGames.isEmpty()) {
+            Bukkit.getScheduler().runTaskTimerAsynchronously(this, this::startRandomGame, interval, interval);
+        } else {
+            getLogger().warning("No games are enabled or invalid interval time in configuration!");
         }
-        if(getConfig().getBoolean("games.unscramble.enabled")) {
-            enabledGames.add(Types.UNSCRAMBLE);
-        }
-        if(getConfig().getBoolean("games.fill-in.enabled")) {
-            enabledGames.add(Types.FILL_IN);
-        }
-        if(getConfig().getBoolean("games.trivia.enabled")) {
-            enabledGames.add(Types.TRIVIA);
-        }
-        if(getConfig().getBoolean("games.unreverse.enabled")) {
-            enabledGames.add(Types.UNREVERSE);
-        }
+    }
 
-        Bukkit.getScheduler().runTaskTimerAsynchronously(this,() -> {
-            if (!Games.isRunning && enabledGames.size() > 0) {
-                Types gameType = enabledGames.get(random.nextInt(enabledGames.size() -1));
-                new Games(gameType).start();
-                OnChatListener.reward = getConfig().getStringList(gameType.getRewardPath());
-                Games.isRunning = true;
-                Games.startTime = System.currentTimeMillis();
+    @Override
+    public void onDisable() {
+        instance = null;
+    }
+
+    private void initializeEnabledGames() {
+        for (Types type : Types.values()) {
+            if (getConfig().getBoolean("games." + type.name().toLowerCase() + ".enabled")) {
+                enabledGames.add(type);
             }
-        }, Util.convertToSeconds(getConfig().getInt("games.settings.time")), Util.convertToSeconds(getConfig().getInt("games.settings.time")));
+        }
+
+        if (enabledGames.isEmpty()) {
+            getLogger().warning("No games are enabled in the configuration!");
+        }
+    }
+
+    private void startRandomGame() {
+        if (!Games.isRunning && !enabledGames.isEmpty()) {
+            Types gameType = enabledGames.get(RANDOM.nextInt(enabledGames.size()));
+            new Games(gameType).start();
+            OnChatListener.reward = getConfig().getStringList(gameType.getRewardPath());
+            Games.isRunning = true;
+            Games.startTime = System.currentTimeMillis();
+        }
     }
 }
