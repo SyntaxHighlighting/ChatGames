@@ -23,46 +23,64 @@ public class OnChatListener implements Listener {
     public OnChatListener(Plugin plugin, String word) {
         this.word = word;
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
-        disabler();
+        scheduleTimeoutTask();
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onASyncChatMessage(AsyncPlayerChatEvent event) {
+    public void onAsyncChatMessage(AsyncPlayerChatEvent event) {
         if (!event.getMessage().equalsIgnoreCase(word)) {
             return;
         }
 
+        Player player = event.getPlayer();
         endTime = Util.millisToSecond(System.currentTimeMillis(), Games.startTime);
 
-        final Player player = event.getPlayer();
-        Bukkit.getOnlinePlayers().forEach(player1 -> {
-            player1.sendMessage(Util.colourise("                        &c&lC&6&lH&e&lA&a&lT &b&lG&d&lA&c&lM&6&lE "));
-            player1.sendMessage(Util.colourise("    &e" + player.getName() + " &fgave the correct answer first! "));
-            player1.sendMessage(Util.colourise("        &7They answered in just &e&n" + Util.roundToDecimal(endTime, 1) + "s&7! "));
-        });
-
-        for (int i = 0; i < reward.size() ; i++) {
-            reward.set(i, reward.get(i).replace("%PLAYER%", player.getName()));
-        }
-        reward.forEach(str -> Bukkit.getServer().getScheduler().runTask(ChatGames.getInstance(), () -> Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), str)));
+        announceWinner(player);
+        executeRewards(player);
 
         isAnswered = true;
         Games.isRunning = false;
-
         AsyncPlayerChatEvent.getHandlerList().unregister(this);
-
     }
 
-    public void disabler() {
+    private void announceWinner(Player player) {
+        String message = String.format(
+                "                        &c&lC&6&lH&e&lA&a&lT &b&lG&d&lA&c&lM&6&lE\n" +
+                "    &e%s &fgave the correct answer first!\n" +
+                "        &7They answered in just &e&n%.1fs&7!",
+                player.getName(), endTime
+        );
+
+        Bukkit.getOnlinePlayers().forEach(onlinePlayer ->
+                onlinePlayer.sendMessage(Util.colourise(message))
+        );
+    }
+
+    private void executeRewards(Player player) {
+        reward.replaceAll(cmd -> cmd.replace("%PLAYER%", player.getName()));
+        reward.forEach(cmd -> 
+                Bukkit.getServer().getScheduler().runTask(
+                        ChatGames.getInstance(),
+                        () -> Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), cmd)
+                )
+        );
+    }
+
+    private void scheduleTimeoutTask() {
+        int timeout = Util.convertToSeconds(ChatGames.getInstance().getConfig().getInt("games.settings.timeout"));
+
         Bukkit.getScheduler().runTaskLater(ChatGames.getInstance(), () -> {
-            if (!(isAnswered)) {
+            if (!isAnswered) {
                 Games.isRunning = false;
                 AsyncPlayerChatEvent.getHandlerList().unregister(this);
-                if(ChatGames.getInstance().getConfig().getBoolean("games.settings.timeout-message-enabled")) {
-                    Bukkit.getOnlinePlayers().forEach(player1 -> player1.sendMessage(Util.colourise("&7No-one has answered in time! The answer was &e&n" + word)));
+
+                if (ChatGames.getInstance().getConfig().getBoolean("games.settings.timeout-message-enabled")) {
+                    String timeoutMessage = String.format("&7No-one has answered in time! The answer was &e&n%s", word);
+                    Bukkit.getOnlinePlayers().forEach(player ->
+                            player.sendMessage(Util.colourise(timeoutMessage))
+                    );
                 }
             }
-        }, Util.convertToSeconds(ChatGames.getInstance().getConfig().getInt("games.settings.timeout")));
+        }, timeout);
     }
-
 }
